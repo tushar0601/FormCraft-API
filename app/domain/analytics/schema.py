@@ -1,0 +1,55 @@
+from datetime import datetime
+from typing import Optional, Any, Dict, List
+from uuid import UUID
+from pydantic import BaseModel, Field
+
+
+class AnalyticsBase(BaseModel):
+    details: dict[str, Any] = Field(default_factory=dict)
+
+
+class FormAnalyticsBase(AnalyticsBase):
+    form_id: UUID
+
+
+class FormAnalyticsResponse(FormAnalyticsBase):
+    id: UUID
+    created_at: datetime
+    updated_at: datetime
+
+    class Config:
+        orm_mode = True
+        from_attributes = True
+
+
+class BlockAnalyticsBase(AnalyticsBase):
+    form_id: UUID
+    block_id: UUID
+    block_type: Optional[str] = None
+
+
+class BlockAnalyticsResponse(BlockAnalyticsBase):
+    id: UUID
+    created_at: datetime
+    updated_at: datetime
+
+    class Config:
+        orm_mode = True
+        from_attributes = True
+
+
+class SentimentCounts(BaseModel):
+    positive: int
+    neutral: int
+    negative: int
+
+
+class TextAnalyser(BaseModel):
+    avg_length: float
+    total: int
+    sentiment_counts: SentimentCounts
+    keyword_counts: Dict[str, int]
+    top_keywords: List[str]
+
+class TextPayload(BaseModel):
+    payload: str
