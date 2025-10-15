@@ -1,16 +1,20 @@
 from sqlalchemy.orm import Session
 from uuid import UUID
-from fastapi import HTTPException
+from fastapi import HTTPException, status
+from typing import Dict, List
 from sqlalchemy.exc import SQLAlchemyError, IntegrityError
 from app.domain.analytics.model import BlockAnalytics
 from app.domain.analytics.schema import (
     BlockAnalyticsResponse,
     TextAnalyser,
     SentimentCounts,
+    CheckBoxAnalyser,
+    MCQAnalyser,
 )
 from app.utils.analytics_utils import analyze_text
 from app.repository.block_analytics_repository import BlockAnalyticsRepository
 from collections import Counter
+from collections import defaultdict
 
 
 class BlockAnalyticsService:
@@ -66,7 +70,8 @@ class BlockAnalyticsService:
                 block_row = self.repo.get_by_block_id(block_id=block_id)
                 if not block_row:
                     raise HTTPException(
-                        status_code=409, detail="Block analytics creation race"
+                        status_code=status.HTTP_409_CONFLICT,
+                        detail="Block analytics creation failed",
                     )
 
         analyser_data = TextAnalyser(**(block_row.details or {}))
@@ -103,4 +108,129 @@ class BlockAnalyticsService:
             return self.repo.update(block_row)
         except SQLAlchemyError:
             self.repo.db.rollback()
-            raise HTTPException(status_code=500, detail="Failed to update analytics")
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail="Failed to update analytics",
+            )
+
+    def handle_checkbox_analytics(
+        self,
+        answer_options: List[int],
+        block_id: UUID,
+        form_id: UUID,
+    ):
+        block_row = self.repo.get_by_block_id(block_id=block_id)
+
+        if not block_row:
+            total_selected = len(answer_options)
+            answered = 1
+
+            opts: Dict[int, int] = defaultdict(int)
+            for ans in answer_options:
+                opts[ans] += 1
+
+            new_analyser_data = CheckBoxAnalyser(
+                options_count=dict(opts),
+                avg_selected=float(total_selected) / float(answered),
+                total_selected=total_selected,
+                answered=answered,
+            )
+
+            payload = BlockAnalytics(
+                form_id=form_id,
+                block_id=block_id,
+                details=new_analyser_data.model_dump(),
+                block_type="checkbox",
+            )
+            try:
+                return self.repo.create(entity=payload)
+            except IntegrityError:
+                block_row = self.repo.get_by_block_id(block_id=block_id)
+                if not block_row:
+                    raise HTTPException(
+                        status_code=status.HTTP_409_CONFLICT,
+                        detail="Block analytics creation race",
+                    )
+
+        analyser_data = CheckBoxAnalyser(**(block_row.details or {}))
+
+        new_total_selected = analyser_data.total_selected
+        new_answered = analyser_data.answered
+        new_options_count: Dict[int, int] = dict(analyser_data.options_count or {})
+
+        for ans in answer_options:
+            new_options_count[ans] = new_options_count.get(ans, 0) + 1
+
+        new_answered += 1
+        new_total_selected += len(answer_options)
+
+        new_avg = (
+            float(new_total_selected) / float(new_answered) if new_answered else 0.0
+        )
+
+        analyser_data.options_count = new_options_count
+        analyser_data.total_selected = new_total_selected
+        analyser_data.answered = new_answered
+        analyser_data.avg_selected = new_avg
+
+        block_row.details = analyser_data.model_dump()
+        block_row.block_type = block_row.block_type or "checkbox"
+
+        try:
+            return self.repo.update(block_row)
+        except SQLAlchemyError:
+            self.repo.db.rollback()
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail="Failed to update analytics",
+            )
+
+    def handle_mcq_analytics(self, option: int, block_id: UUID, form_id: UUID):
+        block_row = self.repo.get_by_block_id(block_id=block_id)
+
+        if not block_row:
+            analyser_data = MCQAnalyser(
+                options_count={option: 1},
+                most_chosen=option,
+                answered=1,
+            )
+            payload = BlockAnalytics(
+                form_id=form_id,
+                block_id=block_id,
+                details=analyser_data.model_dump(),
+                block_type="mcq",
+            )
+            try:
+                return self.repo.create(entity=payload)
+            except IntegrityError:
+                block_row = self.repo.get_by_block_id(block_id=block_id)
+                if not block_row:
+                    raise HTTPException(
+                        status_code=status.HTTP_409_CONFLICT,
+                        detail="Block analytics creation race",
+                    )
+
+        analyser_data = MCQAnalyser(**(block_row.details or {}))
+
+        new_options_count: Dict[int, int] = dict(analyser_data.options_count or {})
+        new_options_count[option] = new_options_count.get(option, 0) + 1
+
+        new_answered = analyser_data.answered + 1
+
+        most_chosen = max(new_options_count.items(), key=lambda kv: (kv[1], -kv[0]))[0]
+
+        analyser_data.options_count = new_options_count
+        analyser_data.answered = new_answered
+        analyser_data.most_chosen = most_chosen
+
+        block_row.details = analyser_data.model_dump()
+        block_row.block_type = block_row.block_type or "mcq"
+
+        try:
+            return self.repo.update(block_row)
+        except SQLAlchemyError:
+            self.repo.db.rollback()
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail="Failed to update analytics",
+            )
