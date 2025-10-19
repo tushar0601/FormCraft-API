@@ -5,6 +5,7 @@ from fastapi import HTTPException, status
 from app.repository.response_repository import ResponseRepository
 from app.domain.response.schema import ResponseCreateSchema
 from app.domain.response.model import FormResponse, BlockResponse
+from app.service.block_analytics_service import BlockAnalyticsService
 from uuid import UUID
 from datetime import datetime, timezone
 
@@ -12,6 +13,7 @@ from datetime import datetime, timezone
 class ResponseService:
     def __init__(self, db: Session):
         self.repo = ResponseRepository(db=db)
+        self.analytics_service = BlockAnalyticsService(db=db)
 
     def get_all_responses(self, skip: int, limit: int):
         return self.repo.get_all_responses(skip=skip, limit=limit)
@@ -41,11 +43,32 @@ class ResponseService:
                     )
                 )
 
+            for q in payload.question_responses:
+                if q.block_type == "text":
+                    self.analytics_service.handle_text_analytics(
+                        text=str(q.value["text"]),
+                        block_id=q.form_block_id,
+                        form_id=payload.form_id,
+                    )
+                elif q.block_type == "checkbox":
+                    self.analytics_service.handle_checkbox_analytics(
+                        answer_options=q.value["selected"],
+                        block_id=q.form_block_id,
+                        form_id=payload.form_id,
+                    )
+                else:
+                    self.analytics_service.handle_mcq_analytics(
+                        option=q.value["selected"],
+                        block_id=q.form_block_id,
+                        form_id=payload.form_id,
+                    )
+
             return self.repo.create_response(
-                new_reponse=new_response, block_responses=response_blocks
+                new_reponse=new_response,
+                block_responses=response_blocks,
             )
 
-        except IntegrityError as e:
+        except IntegrityError:
             raise HTTPException(
                 status_code=status.HTTP_409_CONFLICT,
                 detail="error",
