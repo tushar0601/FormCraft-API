@@ -51,16 +51,31 @@ class TextAnalyser(BaseModel):
     keyword_counts: Dict[str, int]
     top_keywords: List[str]
 
+
 class CheckBoxAnalyser(BaseModel):
-    options_count: Dict[int,int]
+    options_count: Dict[int, int]
     avg_selected: float
     total_selected: int
     answered: int
 
-class MCQAnalyser(BaseModel):
-    options_count: Dict[int,int]
-    most_chosen: int
-    answered:int
 
-class TextPayload(BaseModel):
-    payload: str
+class MCQAnalyser(BaseModel):
+    options_count: Dict[int, int]
+    most_chosen: int
+    answered: int
+
+
+class FormBlockMainResponse(BaseModel):
+    form_id: UUID
+    title: str
+    response_count: int
+    completion_rate: float
+    type: str
+    created_at: str
+
+
+class FormAnalyserMainResponse(BaseModel):
+    total_forms: int
+    total_responses: int
+    avg_completion_rate: float
+    form_data: List[FormBlockMainResponse]
