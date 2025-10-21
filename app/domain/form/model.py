@@ -82,7 +82,7 @@ class FormBlock(Base):
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     form_id = Column(UUID(as_uuid=True), nullable=False)
     sort_order = Column("order", Integer, nullable=False)
-    name = Column(String(200), nullable=True)
+    name = Column(String(10000), nullable=True)
     block_type = Column(
         "type",
         sa.Enum(

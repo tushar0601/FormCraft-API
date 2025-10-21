@@ -10,6 +10,7 @@ from app.domain.analytics.schema import (
     SentimentCounts,
     CheckBoxAnalyser,
     MCQAnalyser,
+    FormBlockAnalyticsOut
 )
 from app.utils.analytics_utils import analyze_text
 from app.repository.block_analytics_repository import BlockAnalyticsRepository
@@ -28,6 +29,14 @@ class BlockAnalyticsService:
             return None
 
         return BlockAnalyticsResponse.model_validate(data)
+
+    def get_analytics_data(self,form_id: UUID):
+        rows = self.repo.get_analytics_data(form_id=form_id)
+        items = [
+            FormBlockAnalyticsOut(**dict(row._mapping))
+            for row in rows
+        ]
+        return items
 
     def handle_text_analytics(self, text: str, block_id: UUID, form_id: UUID):
         ta = analyze_text(text=text)

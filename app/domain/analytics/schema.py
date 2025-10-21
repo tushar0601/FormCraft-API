@@ -79,3 +79,14 @@ class FormAnalyserMainResponse(BaseModel):
     total_responses: int
     avg_completion_rate: float
     form_data: List[FormBlockMainResponse]
+
+class FormBlockAnalyticsOut(BaseModel):
+    form_id: UUID
+    total_response: Optional[int] = 0
+    completion_rate: Optional[float] = 0.0
+    block_analytics_details: Optional[Any] = None  
+    block_id: Optional[UUID] = None
+    block_title: Optional[str] = None
+    block_details: Optional[Any] = None        
+    block_type: Optional[str] = None
+    block_order: Optional[int] = None
